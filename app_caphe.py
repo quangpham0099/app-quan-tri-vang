@@ -6,6 +6,7 @@ st.set_page_config(page_title="Phân Tích Dòng Tiền Cà Phê", layout="wide"
 
 st.title("☕ Ứng Dụng Quản Trị Đầu Tư Cà Phê (Vốn Tự Có)")
 st.markdown("So sánh hiệu quả giữa chiến lược **Bán rải đợt + Gửi tiết kiệm tiền thu được** so với **Giữ nguyên 100% sản lượng chờ bán ở giá cuối vụ**.")
+st.info("💡 **Mẹo:** Nhập **Tháng 0** nếu bạn muốn mô phỏng việc chốt lời ngay lập tức lúc thu hoạch để gửi ngân hàng lấy lãi sớm nhất.")
 
 # --- SIDEBAR: GIAO DIỆN NHẬP LIỆU ---
 st.sidebar.header("⚙️ Quy Mô & Lãi Suất")
@@ -18,29 +19,37 @@ st.sidebar.header("⏱️ Chiến Lược Bán Rải Đợt")
 
 st.sidebar.subheader("Đợt bán 1")
 col1, col2 = st.sidebar.columns(2)
-m1 = col1.number_input("Tháng thứ", value=3, min_value=1, step=1)
+# Cho phép Tháng bắt đầu từ 0
+m1 = col1.number_input("Tháng thứ", value=0, min_value=0, step=1, help="Nhập 0 để bán ngay lập tức")
 r1 = col2.number_input("Tỷ lệ bán (%)", value=30.0, min_value=0.0, max_value=100.0, step=1.0, format="%.1f")
-p1 = st.sidebar.number_input("Giá bán đợt 1 (Tr/tấn)", value=110.0, step=1.0, format="%.2f")
+p1 = st.sidebar.number_input("Giá bán đợt 1 (Tr/tấn)", value=100.0, step=1.0, format="%.2f")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Đợt bán 2")
 col3, col4 = st.sidebar.columns(2)
-m2 = col3.number_input("Tháng thứ ", value=max(7, int(m1)), min_value=int(m1), step=1)
+# Tháng đợt 2 không được nhỏ hơn đợt 1
+default_m2 = max(6, int(m1))
+m2 = col3.number_input("Tháng thứ ", value=default_m2, min_value=int(m1), step=1)
+
 r2_max = float(max(0.0, 100.0 - r1))
-r2 = col4.number_input("Tỷ lệ bán  (%)", value=min(40.0, r2_max), min_value=0.0, max_value=r2_max, step=1.0, format="%.1f")
-p2 = st.sidebar.number_input("Giá bán đợt 2 (Tr/tấn)", value=125.0, step=1.0, format="%.2f")
+default_r2 = min(40.0, r2_max)
+r2 = col4.number_input("Tỷ lệ bán  (%)", value=default_r2, min_value=0.0, max_value=r2_max, step=1.0, format="%.1f")
+p2 = st.sidebar.number_input("Giá bán đợt 2 (Tr/tấn)", value=120.0, step=1.0, format="%.2f")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Đợt chốt cuối")
 r3 = max(0.0, 100.0 - r1 - r2)
 st.sidebar.markdown(f"*Tỷ lệ còn lại bán nốt: **{r3:.1f}%***")
 col5, col6 = st.sidebar.columns(2)
-m3 = col5.number_input("Tháng chốt cuối", value=max(12, int(m2)), min_value=int(m2), step=1)
+
+# Tháng đợt 3 không được nhỏ hơn đợt 2
+default_m3 = max(12, int(m2))
+m3 = col5.number_input("Tháng chốt cuối", value=default_m3, min_value=max(1, int(m2)), step=1)
 p3 = col6.number_input("Giá kỳ vọng (Tr/tấn)", value=140.0, step=1.0, format="%.2f")
 
 # --- XỬ LÝ LÕI TOÁN HỌC ---
 if total_coffee > 0:
-    # 1. Tính toán cho chiến lược Bán Rải Đợt (Staged Strategy)
+    # 1. Tính toán cho chiến lược Bán Rải Đợt
     q1 = total_coffee * (r1 / 100)
     rev1 = q1 * p1
     time_in_bank_1 = max(0, m3 - m1) / 12
@@ -58,18 +67,16 @@ if total_coffee > 0:
     total_interest_earned = int1 + int2
     final_cash_staged = total_revenue_staged + total_interest_earned
     
-    # Giá bán trung bình thực tế (bao gồm cả lãi ngân hàng đẻ ra)
     effective_price_staged = final_cash_staged / total_coffee
 
-    # 2. Tính toán cho chiến lược Giữ 100% (Hold Strategy)
+    # 2. Tính toán cho chiến lược Giữ 100%
     final_cash_hold = total_coffee * p3
     effective_price_hold = p3
 
-    # So sánh
     diff_cash = final_cash_staged - final_cash_hold
 
     # --- HIỂN THỊ KẾT QUẢ GIAO DIỆN ---
-    st.subheader("⚖️ Bàn Cân Chiến Lược (Tại mốc Tháng " + str(m3) + ")")
+    st.subheader(f"⚖️ Bàn Cân Chiến Lược (Tại mốc Tháng {m3})")
     
     colA, colB = st.columns(2)
     
@@ -98,15 +105,18 @@ if total_coffee > 0:
     else:
         st.info("Kết luận: Cả hai chiến lược mang lại hiệu quả tương đương nhau.")
 
-    # Bảng phân tích chi tiết dòng tiền
+    # Format nhãn hiển thị cho đẹp (nếu m = 0 thì ghi "Bán ngay")
+    label_m1 = f"Đợt 1 (T{m1})" if m1 > 0 else "Đợt 1 (Bán ngay)"
+    label_m2 = f"Đợt 2 (T{m2})" if m2 > 0 else "Đợt 2 (Bán ngay)"
+    
     st.markdown("### 📊 Phân tích Chi tiết Chiến lược Bán rải đợt")
     df_staged = pd.DataFrame({
-        "Giai đoạn": [f"Đợt 1 (T{m1})", f"Đợt 2 (T{m2})", f"Đợt cuối (T{m3})"],
+        "Giai đoạn": [label_m1, label_m2, f"Đợt cuối (T{m3})"],
         "Sản lượng bán (Tấn)": [round(q1, 2), round(q2, 2), round(q3, 2)],
         "Giá bán (Tr/tấn)": [p1, p2, p3],
         "Thu tiền mặt (Tr)": [round(rev1, 2), round(rev2, 2), round(rev3, 2)],
         "Kỳ hạn gửi NH (Tháng)": [m3 - m1, m3 - m2, 0],
-        "Lãi tiết kiệm sinh ra (Tr)": [round(int1, 2), round(int2, 2), 0.0]
+        "Lãi tiết kiệm (Tr)": [round(int1, 2), round(int2, 2), 0.0]
     })
     st.table(df_staged)
 
