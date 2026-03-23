@@ -19,25 +19,34 @@ savings_rate = st.sidebar.number_input("Lãi tiết kiệm (%/năm)", value=5.0,
 st.sidebar.markdown("---")
 st.sidebar.subheader("Đợt bán 1")
 col1, col2 = st.sidebar.columns(2)
-m1 = col1.number_input("Tháng thứ", value=3, min_value=1, max_value=11, step=1)
-r1 = col2.number_input("Tỷ lệ bán (%)", value=30.0, step=1.0, format="%.1f")
+m1 = col1.number_input("Tháng thứ", value=3, min_value=1, step=1)
+r1 = col2.number_input("Tỷ lệ bán (%)", value=30.0, min_value=0.0, max_value=100.0, step=1.0, format="%.1f")
 p1 = st.sidebar.number_input("Giá bán đợt 1 (Tr/cây)", value=180.0, step=1.0, format="%.2f")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Đợt bán 2")
 col3, col4 = st.sidebar.columns(2)
-m2 = col3.number_input("Tháng thứ ", value=7, min_value=int(m1), max_value=11, step=1)
-# Đảm bảo r2 không làm tổng tỷ lệ vượt quá 100%
-r2_max = 100.0 - r1
-r2 = col4.number_input("Tỷ lệ bán  (%)", value=min(40.0, r2_max), max_value=r2_max, step=1.0, format="%.1f")
+
+# Khắc phục lỗi: Đảm bảo tháng mặc định của đợt 2 luôn lớn hơn hoặc bằng đợt 1
+default_m2 = max(7, int(m1))
+m2 = col3.number_input("Tháng thứ ", value=default_m2, min_value=int(m1), step=1)
+
+# Khắc phục lỗi tỷ lệ: Nếu đợt 1 bán hết, đợt 2 tối đa chỉ là 0%
+r2_max = float(max(0.0, 100.0 - r1))
+default_r2 = min(40.0, r2_max)
+r2 = col4.number_input("Tỷ lệ bán  (%)", value=default_r2, min_value=0.0, max_value=r2_max, step=1.0, format="%.1f")
+
 p2 = st.sidebar.number_input("Giá bán đợt 2 (Tr/cây)", value=200.0, step=1.0, format="%.2f")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Đợt bán cuối (Tất toán)")
-r3 = 100.0 - r1 - r2
+r3 = max(0.0, 100.0 - r1 - r2)
 st.sidebar.info(f"Tỷ lệ bán đợt cuối tự động tính: **{r3:.1f}%**")
 col5, col6 = st.sidebar.columns(2)
-m3 = col5.number_input("Tháng chốt", value=12, min_value=int(m2), max_value=60, step=1)
+
+# Khắc phục lỗi: Đảm bảo tháng mặc định của đợt 3 luôn lớn hơn hoặc bằng đợt 2
+default_m3 = max(12, int(m2))
+m3 = col5.number_input("Tháng chốt", value=default_m3, min_value=int(m2), step=1)
 p3 = col6.number_input("Giá (Tr/cây)", value=220.0, step=1.0, format="%.2f")
 
 
@@ -48,10 +57,8 @@ if buy_price > 0 and loan > 0:
     savings = 0
     prev_month = 0
     
-    report_data = []
-
     # Hàm xử lý từng đợt
-    def process_stage(stage_name, m, r, p, current_principal, current_savings, prev_m):
+    def process_stage(m, r, p, current_principal, current_savings, prev_m):
         t = max(0, m - prev_m)
         # Tính lãi vay
         accrued_int = current_principal * (loan_rate / 100) * (t / 12)
@@ -74,18 +81,21 @@ if buy_price > 0 and loan > 0:
             current_principal -= paydown
             current_savings = cashflow - paydown
         else:
-            current_savings = cashflow # Âm
+            current_savings = cashflow # Ghi nhận âm (phải tự bỏ tiền túi trả lãi)
             
         return current_principal, current_savings, qty_sold, revenue, accrued_int, sav_int, paydown
 
     # Chạy 3 đợt
-    prin1, sav1, q1, rev1, int1, sint1, pay1 = process_stage("Đợt 1", m1, r1, p1, principal, savings, prev_month)
-    prin2, sav2, q2, rev2, int2, sint2, pay2 = process_stage("Đợt 2", m2, r2, p2, prin1, sav1, m1)
-    prin3, sav3, q3, rev3, int3, sint3, pay3 = process_stage("Đợt 3", m3, r3, p3, prin2, sav2, m2)
+    prin1, sav1, q1, rev1, int1, sint1, pay1 = process_stage(m1, r1, p1, principal, savings, prev_month)
+    prin2, sav2, q2, rev2, int2, sint2, pay2 = process_stage(m2, r2, p2, prin1, sav1, m1)
+    prin3, sav3, q3, rev3, int3, sint3, pay3 = process_stage(m3, r3, p3, prin2, sav2, m2)
 
     net_profit = sav3 - prin3
     equivalent_price = (net_profit + loan) / total_gold
-    actual_avg_price = (rev1 + rev2 + rev3) / total_gold
+    
+    # Nếu chưa bán lượng vàng nào, tránh lỗi chia cho 0
+    total_revenue = rev1 + rev2 + rev3
+    actual_avg_price = total_revenue / total_gold if total_gold > 0 else 0
 
     # --- HIỂN THỊ KẾT QUẢ GIAO DIỆN ---
     st.subheader("🎯 Báo Cáo Hiệu Quả Đầu Tư")
@@ -100,10 +110,10 @@ if buy_price > 0 and loan > 0:
     
     # Tạo DataFrame để hiển thị bảng
     df = pd.DataFrame({
-        "Giai đoạn": ["Đợt 1 (Tháng " + str(m1) + ")", "Đợt 2 (Tháng " + str(m2) + ")", "Đợt 3 (Tháng " + str(m3) + ")"],
+        "Giai đoạn": [f"Đợt 1 (Tháng {m1})", f"Đợt 2 (Tháng {m2})", f"Đợt 3 (Tháng {m3})"],
         "Doanh thu (Tr)": [round(rev1, 2), round(rev2, 2), round(rev3, 2)],
-        "Lãi vay phải trả (Tr)": [round(int1, 2), round(int2, 2), round(int3, 2)],
-        "Dập nợ gốc (Tr)": [round(pay1, 2), round(pay2, 2), round(prin2, 2)], # Đợt 3 dập nốt gốc còn lại
+        "Lãi vay phát sinh (Tr)": [round(int1, 2), round(int2, 2), round(int3, 2)],
+        "Dập nợ gốc (Tr)": [round(pay1, 2), round(pay2, 2), round(prin2, 2)], 
         "Dư nợ còn lại (Tr)": [round(prin1, 2), round(prin2, 2), 0.0]
     })
     
